@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Titipin Sman7 - Jastip Neo-Brutalism</title>
+    
+    <!-- Framework & Fonts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Space Grotesk', 'sans-serif'] },
+                    colors: {
+                        'neo-yellow': '#FFEB3B',
+                        'neo-pink': '#FF4081',
+                        'neo-blue': '#2196F3',
+                        'neo-green': '#00E676',
+                        'neo-black': '#1a1a1a',
+                    },
+                    boxShadow: {
+                        'neo': '4px 4px 0px 0px #000000',
+                        'neo-sm': '2px 2px 0px 0px #000000',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body { background-color: #f0f0f0; color: #000; overflow-x: hidden; }
+        .neo-box { border: 3px solid #000; background: #fff; box-shadow: 4px 4px 0px 0px #000; transition: all 0.2s; }
+        .neo-btn { border: 3px solid #000; font-weight: 700; text-transform: uppercase; box-shadow: 4px 4px 0px 0px #000; transition: all 0.2s; cursor: pointer; }
+        .neo-btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px 0px #000; }
+        .neo-input { border: 3px solid #000; padding: 10px; width: 100%; outline: none; background: #fff; font-family: inherit; }
+        .neo-input:focus { background: #fffceb; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #000; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans">
+
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 bg-neo-yellow border-b-4 border-black px-4 py-3 flex justify-between items-center shadow-neo">
+        <div class="flex items-center gap-2 cursor-pointer" onclick="router('home')">
+            <i class="fa-solid fa-box-open text-2xl"></i>
+            <h1 class="text-xl md:text-2xl font-bold tracking-tighter uppercase italic">TITIPIN<span class="text-neo-pink">SMAN7</span></h1>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="router('cart')" class="neo-btn bg-white px-3 py-1 relative">
+                <i class="fa-solid fa-cart-shopping"></i>
+                <span id="cart-count" class="absolute -top-3 -right-3 bg-neo-pink text-white border-2 border-black w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold hidden">0</span>
+            </button>
+            <button onclick="router('admin')" class="neo-btn bg-neo-black text-white px-3 py-1">
+                <i class="fa-solid fa-user-shield"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- App Container -->
+    <main id="app" class="flex-grow p-4 max-w-5xl mx-auto w-full">
+        <div class="flex flex-col items-center justify-center py-20">
+            <div class="loader mb-4"></div>
+            <p class="font-bold animate-pulse uppercase">Menghubungkan ke Server...</p>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-neo-black text-white p-6 border-t-4 border-black mt-10">
+        <div class="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <p class="font-bold uppercase tracking-widest text-center md:text-left">© 2024 JASTIP SMAN 7 - NO RIBET.</p>
+            <div class="flex gap-4 text-2xl">
+                <i class="fa-brands fa-instagram cursor-pointer hover:text-neo-pink"></i>
+                <i class="fa-brands fa-whatsapp cursor-pointer hover:text-neo-green"></i>
+            </div>
+        </div>
+    </footer>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, collection, addDoc, doc, onSnapshot, query, orderBy, updateDoc, deleteDoc } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "", 
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'sman7-production';
+
+        let db, auth, user;
+        let products = [];
+        let cart = [];
+        let isAdmin = false;
+
+        async function init() {
+            try {
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                };
+
+                await initAuth();
+
+                onAuthStateChanged(auth, (u) => {
+                    user = u;
+                    if (user) {
+                        setupDataListeners();
+                        router('home');
+                    }
+                });
+            } catch (err) {
+                document.getElementById('app').innerHTML = `<div class="p-8 neo-box bg-red-100 text-red-600 font-bold uppercase">Gagal koneksi: ${err.message}</div>`;
+            }
+        }
+
+        function setupDataListeners() {
+            const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'products'), orderBy('timestamp', 'desc'));
+            onSnapshot(q, (snapshot) => {
+                products = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderCurrentView();
+            });
+        }
+
+        function renderCurrentView() {
+            if (['home', 'catalog', 'admin-panel'].includes(window.currentView)) {
+                router(window.currentView);
+            }
+        }
+
+        window.router = function(view) {
+            window.currentView = view;
+            const container = document.getElementById('app');
+            container.className = "fade-in flex-grow p-4 max-w-5xl mx-auto w-full";
+
+            if (view === 'home') {
+                container.innerHTML = `
+                    <div class="py-12 grid md:grid-cols-2 gap-10 items-center">
+                        <div class="space-y-6">
+                            <div class="bg-neo-pink text-white font-bold px-4 py-1 border-2 border-black inline-block transform -rotate-2 uppercase">Kantin Kejujuran Digital</div>
+                            <h2 class="text-7xl font-bold leading-tight uppercase tracking-tighter">
+                                TITIP<br><span class="bg-neo-yellow px-2 border-4 border-black">MAKAN</span> YUK!
+                            </h2>
+                            <p class="text-xl font-bold italic text-gray-800 tracking-tight">Solusi laper pas jam istirahat tapi males ngantri di kantin SMAN 7.</p>
+                            <div class="flex flex-wrap gap-4 pt-4">
+                                <button onclick="router('catalog')" class="neo-btn bg-neo-green px-10 py-4 text-xl">LIHAT MENU</button>
+                                <button onclick="router('jastip')" class="neo-btn bg-white px-10 py-4 text-xl">BUKA JASTIP</button>
+                            </div>
+                        </div>
+                        <div class="neo-box bg-neo-blue p-8 transform rotate-3 hidden md:flex flex-col items-center">
+                            <i class="fa-solid fa-hamburger text-[150px] text-white drop-shadow-[4px_4px_0px_rgba(0,0,0,1)]"></i>
+                            <p class="mt-4 font-black text-white text-2xl uppercase tracking-widest">SMAN 7 PRIDE</p>
+                        </div>
+                    </div>
+                `;
+            } else if (view === 'catalog') {
+                const approved = products.filter(p => p.status === 'approved');
+                container.innerHTML = `
+                    <div class="flex justify-between items-center mb-8">
+                        <h2 class="text-4xl font-black uppercase border-b-8 border-neo-yellow">MENU TERSEDIA</h2>
+                        <span class="font-bold bg-white border-2 border-black px-3 py-1">${approved.length} ITEMS</span>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        ${approved.length ? approved.map(p => `
+                            <div class="neo-box group overflow-hidden">
+                                <div class="h-48 border-b-2 border-black bg-gray-100 relative overflow-hidden">
+                                    <img src="${p.image}" class="w-full h-full object-cover transition-transform group-hover:scale-110">
+                                </div>
+                                <div class="p-4 bg-white">
+                                    <h4 class="font-black text-lg uppercase truncate">${p.name}</h4>
+                                    <p class="text-neo-pink font-black text-xl">Rp ${p.price.toLocaleString()}</p>
+                                    <p class="text-[10px] font-bold text-gray-500 mb-4 uppercase">Oleh: ${p.sellerName}</p>
+                                    <button onclick="addToCart('${p.id}')" class="w-full neo-btn bg-neo-black text-white py-2 group-hover:bg-neo-yellow group-hover:text-black">TAMBAHKAN</button>
+                                </div>
+                            </div>
+                        `).join('') : '<p class="col-span-4 text-center py-20 font-black text-2xl uppercase italic text-gray-400">Belum ada jastip yang diverifikasi...</p>'}
+                    </div>
+                `;
+            } else if (view === 'jastip') {
+                container.innerHTML = `
+                    <div class="max-w-xl mx-auto">
+                        <div class="neo-box bg-neo-yellow p-4 mb-6 transform -rotate-1">
+                            <h2 class="text-2xl font-black uppercase text-center">Formulir Buka Jastip</h2>
+                        </div>
+                        <form id="form-jastip" class="neo-box p-8 space-y-5 bg-white">
+                            <div>
+                                <label class="block font-black text-xs uppercase mb-1">Nama & Kelas</label>
+                                <input type="text" id="seller" placeholder="Budi X-MIPA 1" required class="neo-input">
+                            </div>
+                            <div>
+                                <label class="block font-black text-xs uppercase mb-1">Nama Jajanan</label>
+                                <input type="text" id="item" placeholder="Makaroni / Cilok" required class="neo-input">
+                            </div>
+                            <div>
+                                <label class="block font-black text-xs uppercase mb-1">Harga Titip (Rp)</label>
+                                <input type="number" id="price" placeholder="5000" required class="neo-input">
+                            </div>
+                            <div>
+                                <label class="block font-black text-xs uppercase mb-1">Foto Jajanan</label>
+                                <input type="file" id="photo" accept="image/*" required class="neo-input border-dashed">
+                            </div>
+                            <button type="submit" class="neo-btn bg-neo-pink text-white w-full py-4 text-xl">AJUKAN JASTIP</button>
+                        </form>
+                    </div>
+                `;
+                document.getElementById('form-jastip').onsubmit = handleJastip;
+            } else if (view === 'cart') {
+                renderCart(container);
+            } else if (view === 'admin') {
+                if (isAdmin) { router('admin-panel'); return; }
+                container.innerHTML = `
+                    <div class="max-w-xs mx-auto py-20">
+                        <div class="neo-box p-8 bg-neo-black text-white text-center">
+                            <h3 class="font-black text-2xl mb-6 uppercase italic">Staff Only</h3>
+                            <input type="password" id="pass" class="neo-input text-black mb-4 text-center" placeholder="PASSWORD">
+                            <button onclick="checkAdmin()" class="neo-btn bg-neo-yellow text-black w-full py-3">MASUK</button>
+                        </div>
+                    </div>
+                `;
+            } else if (view === 'admin-panel') {
+                if (!isAdmin) { router('admin'); return; }
+                renderAdminPanel(container);
+            }
+        }
+
+        async function handleJastip(e) {
+            e.preventDefault();
+            const btn = e.target.querySelector('button');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> MENGIRIM...';
+            btn.disabled = true;
+
+            const file = document.getElementById('photo').files[0];
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = async () => {
+                const data = {
+                    sellerName: document.getElementById('seller').value,
+                    name: document.getElementById('item').value,
+                    price: parseInt(document.getElementById('price').value),
+                    image: reader.result,
+                    status: 'pending',
+                    timestamp: new Date().toISOString(),
+                    uid: user.uid
+                };
+                
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'products'), data);
+                    alert('Jastip berhasil diajukan! Tunggu verifikasi admin SMAN 7.');
+                    router('home');
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                    btn.disabled = false;
+                    btn.innerText = 'AJUKAN JASTIP';
+                }
+            };
+        }
+
+        function renderAdminPanel(container) {
+            container.innerHTML = `
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-4xl font-black uppercase">Admin Dashboard</h2>
+                    <button onclick="isAdmin=false; router('home')" class="neo-btn bg-red-500 text-white px-4 py-1">LOGOUT</button>
+                </div>
+                <div class="space-y-4">
+                    ${products.map(p => `
+                        <div class="neo-box p-4 flex flex-wrap gap-4 items-center bg-white ${p.status === 'pending' ? 'border-neo-pink' : ''}">
+                            <img src="${p.image}" class="w-16 h-16 object-cover border-2 border-black">
+                            <div class="flex-grow min-w-[200px]">
+                                <p class="font-black uppercase">${p.name} - Rp ${p.price.toLocaleString()}</p>
+                                <p class="text-xs font-bold uppercase">Seller: ${p.sellerName} | Status: <span class="${p.status === 'approved' ? 'text-neo-green' : 'text-neo-pink'}">${p.status}</span></p>
+                            </div>
+                            <div class="flex gap-2">
+                                ${p.status === 'pending' ? `<button onclick="window.updateStatus('${p.id}', 'approved')" class="neo-btn bg-neo-green px-4 py-1 text-xs">APPROVE</button>` : ''}
+                                <button onclick="window.deleteProduct('${p.id}')" class="neo-btn bg-red-100 text-red-600 px-4 py-1 text-xs border-red-600">DELETE</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        window.updateStatus = async (id, status) => {
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'products', id);
+            await updateDoc(ref, { status });
+        };
+
+        window.deleteProduct = async (id) => {
+            if (!confirm('Yakin ingin menghapus produk ini?')) return;
+            const ref = doc(db, 'artifacts', appId, 'public', 'data', 'products', id);
+            await deleteDoc(ref);
+        };
+
+        window.addToCart = function(id) {
+            const prod = products.find(p => p.id === id);
+            if (prod) {
+                cart.push({...prod});
+                updateCartUI();
+                const cartBtn = document.querySelector('button[onclick="router(\'cart\')"]');
+                cartBtn.classList.add('scale-110', 'bg-neo-green');
+                setTimeout(() => cartBtn.classList.remove('scale-110', 'bg-neo-green'), 300);
+            }
+        }
+
+        function updateCartUI() {
+            const count = document.getElementById('cart-count');
+            count.innerText = cart.length;
+            count.classList.toggle('hidden', cart.length === 0);
+        }
+
+        function renderCart(container) {
+            const total = cart.reduce((s, i) => s + i.price, 0);
+            container.innerHTML = `
+                <h2 class="text-4xl font-black mb-8 uppercase border-b-8 border-neo-pink inline-block italic">Keranjang Jajan</h2>
+                <div class="grid md:grid-cols-3 gap-8">
+                    <div class="md:col-span-2 space-y-4">
+                        ${cart.length ? cart.map((item, idx) => `
+                            <div class="neo-box p-4 flex gap-4 items-center bg-white transform hover:-translate-y-1">
+                                <img src="${item.image}" class="w-20 h-20 object-cover border-2 border-black">
+                                <div class="flex-grow">
+                                    <p class="font-black text-xl uppercase">${item.name}</p>
+                                    <p class="font-bold text-neo-pink italic">Rp ${item.price.toLocaleString()}</p>
+                                </div>
+                                <button onclick="window.removeCart(${idx})" class="neo-btn bg-red-100 p-2 text-red-600 border-red-600">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        `).join('') : '<p class="text-2xl font-bold uppercase italic text-gray-400 py-10">Wah, keranjangmu masih kosong...</p>'}
+                    </div>
+                    <div class="md:col-span-1">
+                        <div class="neo-box p-6 bg-neo-yellow sticky top-24">
+                            <h4 class="font-black text-2xl uppercase mb-2">Total Harga</h4>
+                            <div class="flex justify-between font-black text-xl mb-6 border-t-2 border-black pt-2">
+                                <span>TOTAL</span>
+                                <span>Rp ${total.toLocaleString()}</span>
+                            </div>
+                            <button onclick="window.checkout()" class="neo-btn bg-black text-white w-full py-4 text-xl">PESAN VIA WHATSAPP</button>
+                            <p class="text-[10px] mt-4 font-bold text-center uppercase leading-none italic">Note: Bayar langsung ke penjual saat makanan sampai.</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.removeCart = (idx) => {
+            cart.splice(idx, 1);
+            router('cart');
+            updateCartUI();
+        };
+
+        window.checkout = async () => {
+            if (!cart.length) return;
+            const buyer = prompt("Siapa nama kamu dan di kelas mana?");
+            if (!buyer) return;
+            
+            const itemsList = cart.map(i => i.name).join(', ');
+            const total = cart.reduce((s, i) => s + i.price, 0);
+            
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'orders'), {
+                    buyer, items: itemsList, total, timestamp: new Date().toISOString()
+                });
+                
+                const msg = encodeURIComponent(`Halo Jastip SMAN 7!\n\nNama: ${buyer}\nPesanan: ${itemsList}\nTotal: Rp ${total.toLocaleString()}\n\nMohon konfirmasinya ya!`);
+                window.open(`https://wa.me/6281234567890?text=${msg}`, '_blank'); // Ganti dengan nomor WA Admin SMAN 7
+                
+                cart = [];
+                updateCartUI();
+                router('home');
+            } catch (err) {
+                alert('Gagal membuat pesanan: ' + err.message);
+            }
+        };
+
+        window.checkAdmin = () => {
+            if(document.getElementById('pass').value === 'sman7') {
+                isAdmin = true;
+                router('admin-panel');
+            } else {
+                alert('Password admin salah!');
+            }
+        };
+
+        init();
+    </script>
+</body>
+</html>
